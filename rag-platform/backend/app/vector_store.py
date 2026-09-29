@@ -48,14 +48,41 @@ def add_documents(
         points=points
     )
 
+def add_chunks(
+    chunks: list[str],
+    vectors: list[list[float]],
+    filename: str
+):
+    points = []
+
+    for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
+        point = PointStruct(
+            id=index,
+            vector=vector,
+            payload={
+                "text": chunk,
+                "filename": filename,
+                "chunk_index": index
+            }
+        )
+
+        points.append(point)
+
+    client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=points
+    )
+
 def search_documents(
     query_vector: list[float],
-    limit: int = 3
+    limit: int = 5,
+    score_threshold: float = 0.45
 ):
     results = client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
         limit=limit,
+        score_threshold=score_threshold,
         with_payload=True
     ).points
 
