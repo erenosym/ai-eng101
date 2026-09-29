@@ -15,28 +15,21 @@ reranking without changing the production answer path.
 ## Architecture
 
 ```mermaid
-flowchart TB
-    browser["Browser / React"] -->|"static assets"| frontend["Nginx frontend service"]
-    browser -->|"HTTP + streamed NDJSON"| api["FastAPI API"]
+flowchart LR
+    browser["Browser / React"] -->|"API requests"| api["FastAPI"]
+    frontend["Nginx frontend"] -->|"static assets"| browser
 
     subgraph compose["Docker Compose"]
-        frontend
         api
-        qdrant["Qdrant\ncosine vector store"]
+        frontend
+        qdrant["Qdrant"]
     end
 
-    upload["Document upload"] --> api
-    api --> parser["Parser"] --> chunks["Character chunking\n1,200 / 200 overlap"]
-    chunks --> embeddings["all-MiniLM-L6-v2"] --> qdrant
-
-    api --> dense["Dense retrieval"] --> qdrant
-    api -. "evaluation modes" .-> bm25["BM25 lexical retrieval"]
-    dense -.-> rrf["RRF hybrid fusion"]
-    bm25 -.-> rrf
-    rrf -.-> reranker["Optional CrossEncoder reranker"]
-
-    api -->|"retrieved context"| ollama["Host-managed Ollama\nQwen2.5:7B"]
-    ollama -->|"streaming answer + citations"| api
+    api -->|"ingestion: parse → chunk → embed"| qdrant
+    api -->|"dense retrieval"| qdrant
+    api -.->|"hybrid eval: BM25 + RRF + reranker"| qdrant
+    api -->|"retrieved context"| ollama["Host Ollama\nQwen2.5:7B"]
+    ollama -->|"streamed answer"| api
 ```
 
 The production `/search`, `/ask`, and `/ask/stream` endpoints use the dense path.
