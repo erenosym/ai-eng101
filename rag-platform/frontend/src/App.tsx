@@ -1,16 +1,13 @@
 import { useState } from "react";
 import "./App.css";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8001";
+
 type Source = {
   filename: string | null;
   chunk_index: number | null;
   score: number;
-};
-
-type AskResponse = {
-  question: string;
-  answer: string;
-  sources: Source[];
 };
 
 type Message = {
@@ -37,7 +34,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8001/documents/parse",
+        `${API_BASE_URL}/documents/parse`,
         {
           method: "POST",
           body: formData,
@@ -85,7 +82,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8001/ask/stream",
+        `${API_BASE_URL}/ask/stream`,
         {
           method: "POST",
           headers: {
@@ -158,6 +155,27 @@ function App() {
                 content:
                   currentMessage.content +
                   event.content,
+              };
+
+              return updated;
+            });
+          }
+
+          if (event.type === "error") {
+            const errorMessage =
+              event.error?.message ?? "Answer generation failed.";
+
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIndex = updated.length - 1;
+              const currentMessage = updated[lastIndex];
+              const prefix = currentMessage.content
+                ? `${currentMessage.content}\n\n`
+                : "";
+
+              updated[lastIndex] = {
+                ...currentMessage,
+                content: `${prefix}Generation stopped: ${errorMessage}`,
               };
 
               return updated;

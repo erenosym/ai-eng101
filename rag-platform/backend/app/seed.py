@@ -1,5 +1,11 @@
+from uuid import uuid5, NAMESPACE_URL
+
 from app.embeddings import create_embedding
-from app.vector_store import create_collection, add_documents
+from app.vector_store import (
+    SEED_COLLECTION_NAME,
+    add_chunks,
+    create_collection,
+)
 
 
 documents = [
@@ -13,16 +19,19 @@ documents = [
 
 
 def seed():
-    create_collection()
+    create_collection(SEED_COLLECTION_NAME)
 
     vectors = [
         create_embedding(document)
         for document in documents
     ]
 
-    add_documents(
-        texts=documents,
-        vectors=vectors
+    add_chunks(
+        chunks=documents,
+        vectors=vectors,
+        filename="synthetic-seed.txt",
+        document_id=str(uuid5(NAMESPACE_URL, "ai-engineering-lab:synthetic-seed")),
+        collection_name=SEED_COLLECTION_NAME,
     )
 
 

@@ -1,448 +1,231 @@
-# AI Engineering Lab
+# AI Engineering Lab / RAG Platform
 
-A production-oriented Retrieval-Augmented Generation (RAG) application built with FastAPI, Qdrant, React, Ollama, and SentenceTransformers.
+## Overview
 
-The project focuses on building an end-to-end document question-answering system rather than only wrapping an LLM API. Uploaded documents are parsed, chunked, embedded, stored in a vector database, retrieved semantically, and used as grounded context for a local language model.
+This repository contains a local-first Retrieval-Augmented Generation (RAG) platform
+for uploading documents and asking grounded questions about their contents. It combines
+a React interface, a FastAPI service, Qdrant vector search, SentenceTransformers
+embeddings, and a locally served Ollama model. Answers stream to the browser with the
+source chunks used as context.
 
-## Features
-
-- PDF, DOCX, and PPTX document ingestion
-- Document parsing with MarkItDown
-- Overlapping text chunking
-- SentenceTransformer embeddings
-- Qdrant vector database
-- Semantic similarity search
-- Configurable Top-K retrieval
-- Similarity score threshold filtering
-- Retrieval-Augmented Generation
-- Grounded LLM answers using retrieved context
-- Source metadata and citations
-- Retrieval debug panel
-- Conversation history
-- Streaming LLM responses
-- React + TypeScript frontend
-- FastAPI backend
-- Local LLM inference with Ollama
-- Dockerized Qdrant service
+The project also treats retrieval as a measurable subsystem. A shared 20-question
+benchmark compares dense retrieval, BM25 + dense rank fusion, and cross-encoder
+reranking without changing the production answer path.
 
 ## Architecture
 
-```text
-                       User
-                        │
-                        ▼
-                React + TypeScript
-                        │
-             ┌──────────┴──────────┐
-             │                     │
-             ▼                     ▼
-      Document Upload          User Question
-             │                     │
-             ▼                     ▼
-          FastAPI                FastAPI
-             │                     │
-             ▼                     ▼
-         MarkItDown         SentenceTransformer
-             │                     │
-             ▼                     ▼
-       Markdown Text          Query Embedding
-             │                     │
-             ▼                     │
-          Chunking                  │
-             │                     │
-             ▼                     │
-    SentenceTransformer            │
-             │                     │
-             ▼                     ▼
-       Chunk Embeddings ───────► Qdrant
-                                   │
-                                   ▼
-                          Top-K Semantic Retrieval
-                                   │
-                                   ▼
-                           Score Threshold Filter
-                                   │
-                                   ▼
-                           Retrieved Context
-                                   │
-                                   ▼
-                              Ollama LLM
-                                   │
-                                   ▼
-                          Streaming RAG Answer
-                                   │
-                                   ▼
-                        Answer + Source Metadata
+```mermaid
+flowchart TB
+    browser["Browser / React"] -->|"static assets"| frontend["Nginx frontend service"]
+    browser -->|"HTTP + streamed NDJSON"| api["FastAPI API"]
+
+    subgraph compose["Docker Compose"]
+        frontend
+        api
+        qdrant["Qdrant\ncosine vector store"]
+    end
+
+    upload["Document upload"] --> api
+    api --> parser["Parser"] --> chunks["Character chunking\n1,200 / 200 overlap"]
+    chunks --> embeddings["all-MiniLM-L6-v2"] --> qdrant
+
+    api --> dense["Dense retrieval"] --> qdrant
+    api -. "evaluation modes" .-> bm25["BM25 lexical retrieval"]
+    dense -.-> rrf["RRF hybrid fusion"]
+    bm25 -.-> rrf
+    rrf -.-> reranker["Optional CrossEncoder reranker"]
+
+    api -->|"retrieved context"| ollama["Host-managed Ollama\nQwen2.5:7B"]
+    ollama -->|"streaming answer + citations"| api
 ```
 
-## RAG Pipeline
+The production `/search`, `/ask`, and `/ask/stream` endpoints use the dense path.
+Hybrid retrieval and reranking remain isolated, comparable evaluation modes. See
+[the architecture notes](docs/architecture.md) for component responsibilities and
+design rationale.
 
-### 1. Document ingestion
+## Retrieval Strategy
 
-Users can upload supported document formats through the frontend.
+- **Dense semantic search** embeds the query with
+  `sentence-transformers/all-MiniLM-L6-v2` and searches Qdrant using cosine
+  similarity. It is the stable production baseline.
+- **BM25 lexical search** rewards exact term overlap and complements semantic search
+  on identifiers and fact-heavy queries.
+- **Hybrid RRF** combines dense and BM25 ranks using Reciprocal Rank Fusion (`k=60`),
+  without requiring their incompatible raw scores to share a scale.
+- **Reranking** applies `cross-encoder/ms-marco-MiniLM-L-6-v2` to the fused candidate
+  set for better top-rank ordering at additional inference cost.
 
-The backend converts the document into Markdown using MarkItDown.
+## Evaluation
 
-```text
-PDF / DOCX / PPTX
-        ↓
-     MarkItDown
-        ↓
-   Markdown text
-```
+All modes use the same 20 manually labeled, domain-specific questions and unchanged
+`expected_chunk_ids`. The benchmark measures retrieval quality—not final LLM answer
+quality, correctness, or faithfulness.
 
-### 2. Chunking
+| Retrieval mode | Hit Rate@3 | Hit Rate@5 | Hit Rate@10 | MRR |
+|---|---:|---:|---:|---:|
+| Dense | 0.85 | 0.85 | 0.90 | 0.7833 |
+| Hybrid (dense + BM25 + RRF) | 0.90 | 1.00 | 1.00 | 0.8475 |
+| Hybrid + reranker | 1.00 | 1.00 | 1.00 | 0.9750 |
 
-The extracted text is split into overlapping chunks.
+Hybrid + reranker had approximately 85 ms median and 177.5 ms p95 total retrieval
+latency in the recorded run; average reranking latency was approximately 102.8 ms.
+Hardware and model-cache state affect latency. Methodology, failure analysis, and
+reproduction details are in the [retrieval evaluation report](rag-platform/evals/README.md).
 
-Current configuration:
+## Production Reliability
 
-```text
-chunk size: 1200 characters
-overlap: 200 characters
-```
+- `GET /health` reports API, Qdrant, and Ollama status without making dependency
+  outages crash the service.
+- Environment-backed centralized settings provide local defaults and bounded external
+  service timeouts.
+- Standard Python logging covers lifecycle, indexing, retrieval timing, and dependency
+  failures without logging full documents or prompts.
+- API errors use short structured responses rather than exposing stack traces.
+- Docker Compose supplies health-aware service startup and a named volume for Qdrant
+  persistence.
 
-Overlap helps preserve context around chunk boundaries.
+## Quick Start
 
-### 3. Embeddings
+### A. Docker Compose
 
-Each chunk is converted into a dense vector using:
-
-```text
-sentence-transformers/all-MiniLM-L6-v2
-```
-
-The model produces 384-dimensional embeddings.
-
-```text
-Text Chunk
-    ↓
-SentenceTransformer
-    ↓
-384-dimensional vector
-```
-
-### 4. Vector storage
-
-Embeddings are stored in Qdrant together with metadata.
-
-Each point contains:
-
-```json
-{
-  "vector": "...",
-  "payload": {
-    "text": "chunk content",
-    "filename": "document.pdf",
-    "chunk_index": 12
-  }
-}
-```
-
-### 5. Retrieval
-
-When the user asks a question:
-
-```text
-Question
-   ↓
-Query Embedding
-   ↓
-Qdrant Similarity Search
-   ↓
-Top-K Relevant Chunks
-```
-
-Cosine similarity is used for vector comparison.
-
-A configurable similarity threshold is applied to reject low-relevance retrieval results.
-
-Current baseline:
-
-```text
-score_threshold = 0.35
-```
-
-This value is currently treated as a baseline and can later be optimized using retrieval evaluation.
-
-### 6. Grounded generation
-
-Retrieved chunks are combined into a context and passed to the local LLM.
-
-The system prompt instructs the model to answer only using the provided context.
-
-```text
-Retrieved Chunks
-      ↓
-RAG Context
-      ↓
-Ollama LLM
-      ↓
-Grounded Answer
-```
-
-If sufficiently relevant context is not available, the system rejects the query instead of forcing the LLM to generate an unsupported answer.
-
-## Streaming Responses
-
-The backend exposes a streaming RAG endpoint.
-
-Instead of waiting for the complete LLM response, generated text is sent incrementally to the frontend.
-
-```text
-Ollama
-  ↓
-stream=True
-  ↓
-FastAPI StreamingResponse
-  ↓
-NDJSON events
-  ↓
-React ReadableStream
-  ↓
-Live assistant response
-```
-
-The stream also sends retrieval metadata so the frontend can display the source chunks used for generation.
-
-## Retrieval Debugging
-
-Each assistant answer can expose retrieval information through the frontend debug panel.
-
-Example:
-
-```text
-Retrieval debug
-
-thesis.pdf
-Chunk: 18
-Similarity: 0.672
-
-thesis.pdf
-Chunk: 21
-Similarity: 0.638
-```
-
-This makes it possible to inspect whether poor answers originate from retrieval or generation.
-
-## Project Structure
-
-```text
-ai-engineering-lab/
-│
-└── rag-platform/
-    │
-    ├── backend/
-    │   ├── app/
-    │   │   ├── main.py
-    │   │   ├── embeddings.py
-    │   │   ├── vector_store.py
-    │   │   ├── document_parser.py
-    │   │   ├── chunking.py
-    │   │   ├── llm.py
-    │   │   └── seed.py
-    │   │
-    │   ├── requirements.txt
-    │   └── .venv/
-    │
-    └── frontend/
-        ├── src/
-        │   ├── App.tsx
-        │   └── App.css
-        │
-        ├── package.json
-        └── vite.config.ts
-```
-
-## Tech Stack
-
-### Backend
-
-- Python
-- FastAPI
-- Pydantic
-- SentenceTransformers
-- Qdrant Python Client
-- MarkItDown
-- Ollama
-
-### Frontend
-
-- React
-- TypeScript
-- Vite
-
-### Infrastructure
-
-- Docker
-- Qdrant
-
-## Running the Project
-
-### 1. Start Qdrant
-
-From the project root:
+Prerequisites: Docker with Compose, plus Ollama running on the host with
+`qwen2.5:7b` available (`ollama list` verifies local models).
 
 ```bash
-docker run -d \
-  --name ai-lab-qdrant \
-  -p 6333:6333 \
-  -p 6334:6334 \
-  -v "$(pwd)/qdrant_storage:/qdrant/storage" \
-  qdrant/qdrant
+cd rag-platform
+cp .env.example .env
+docker compose up --build
 ```
 
-Qdrant dashboard:
+- Frontend: <http://localhost:5173>
+- API and OpenAPI docs: <http://localhost:8001> and <http://localhost:8001/docs>
+- Health: <http://localhost:8001/health>
+- Qdrant dashboard: <http://localhost:6333/dashboard>
 
-```text
-http://localhost:6333/dashboard
-```
-
-### 2. Start Ollama
-
-Make sure Ollama is installed and the configured model is available.
-
-Example:
+The API container reaches Qdrant through the Compose network and host Ollama through
+`host.docker.internal`. To stop the stack while retaining indexed data:
 
 ```bash
-ollama list
+docker compose down
 ```
 
-The current backend configuration uses:
+Do not add `-v` unless you intend to delete the Qdrant volume.
 
-```text
-qwen2.5:7b
+### B. Local Development
+
+Run Qdrant and Ollama first. From the repository root, start Qdrant with:
+
+```bash
+docker compose -f rag-platform/docker-compose.yml up -d qdrant
 ```
 
-### 3. Start the backend
+Start the API:
 
 ```bash
 cd rag-platform/backend
-
+python3 -m venv .venv
 source .venv/bin/activate
-
 pip install -r requirements.txt
-
-uvicorn app.main:app --reload --port 8001
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
-FastAPI documentation:
-
-```text
-http://127.0.0.1:8001/docs
-```
-
-### 4. Start the frontend
-
-In another terminal:
+Start the frontend in another terminal:
 
 ```bash
 cd rag-platform/frontend
-
 npm install
-
 npm run dev
 ```
 
-Open:
+## Configuration
 
-```text
-http://localhost:5173
+Copy [`rag-platform/.env.example`](rag-platform/.env.example) to
+`rag-platform/.env`. The `.env` file is ignored by Git; the example contains no
+secrets.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `QDRANT_HOST` / `QDRANT_PORT` | `localhost` / `6333` | Local Qdrant connection |
+| `QDRANT_COLLECTION_NAME` | `documents` | Production chunk collection |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL for local API runs |
+| `OLLAMA_DOCKER_BASE_URL` | `http://host.docker.internal:11434` | Ollama URL inside Compose |
+| `OLLAMA_MODEL` | `qwen2.5:7b` | Generation model |
+| `RETRIEVAL_SCORE_THRESHOLD` | `0.35` | Dense retrieval baseline threshold |
+| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Embedding model |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1200` / `200` | Character chunking parameters |
+| `FRONTEND_ORIGIN` | `http://localhost:5173` | Allowed browser origin |
+| `VITE_API_BASE_URL` | `http://localhost:8001` | Browser-visible API URL |
+| `LOG_LEVEL` | `INFO` | Backend log verbosity |
+
+Timeouts, ports, and seed-collection settings are also documented in the example file.
+
+## Testing and Evaluation
+
+Run from the repository root:
+
+```bash
+PYTHONPATH=rag-platform/backend \
+  python3 -m unittest discover -s rag-platform/backend/tests -v
+
+python3 -m unittest discover -s rag-platform/evals/tests -v
+
+cd rag-platform/frontend
+npm run build
+npm run lint
 ```
 
-## Current API Endpoints
+The retrieval runner expects Qdrant to contain the corpus associated with the labels:
 
-### Health check
+```bash
+rag-platform/backend/.venv/bin/python \
+  rag-platform/evals/run_retrieval_eval.py \
+  --retrieval-mode dense
 
-```http
-GET /health
+rag-platform/backend/.venv/bin/python \
+  rag-platform/evals/run_retrieval_eval.py \
+  --retrieval-mode hybrid \
+  --candidate-pool 50 \
+  --rrf-k 60
+
+rag-platform/backend/.venv/bin/python \
+  rag-platform/evals/run_retrieval_eval.py \
+  --retrieval-mode hybrid-rerank \
+  --candidate-pool 50 \
+  --rrf-k 60 \
+  --rerank-candidates 20
 ```
 
-### Generate an embedding
+## Demo Scenarios
 
-```http
-POST /embedding
-```
+1. Upload a supported document, ask a question whose answer is present, and inspect
+   the cited filename, chunk index, retrieval score, and streamed response.
+2. Ask an out-of-domain question and demonstrate that the `0.35` relevance threshold
+   prevents unsupported answer generation when no chunk qualifies.
+3. Run dense, hybrid, and hybrid-rerank evaluation modes against the same labels and
+   discuss the measured quality/latency trade-off. The UI itself remains dense-only.
 
-### Parse and index a document
+## Trade-offs and Known Limitations
 
-```http
-POST /documents/parse
-```
+- The production answer path remains dense retrieval; benchmarked hybrid/reranking
+  stages are evaluation utilities.
+- Ollama and its model lifecycle are host-managed rather than part of Compose.
+- The benchmark covers 20 questions over one document corpus, so its results should
+  not be generalized beyond that set.
+- There is no end-to-end evaluation of generated-answer correctness or faithfulness.
+- There is no PostgreSQL/application-state layer, authentication, or multi-user
+  isolation.
+- Chunking is character-based, and scanned documents may require separate OCR.
+- First use of the embedding or reranker model may require a download and warm-up;
+  subsequent use can rely on the local model cache.
 
-### Semantic search
+## What This Project Demonstrates
 
-```http
-POST /search
-```
-
-### RAG answer
-
-```http
-POST /ask
-```
-
-### Streaming RAG answer
-
-```http
-POST /ask/stream
-```
-
-## Example Workflow
-
-1. Start Qdrant.
-2. Start Ollama.
-3. Start the FastAPI backend.
-4. Start the React frontend.
-5. Upload a PDF, DOCX, or PPTX document.
-6. The document is parsed and chunked.
-7. Chunk embeddings are stored in Qdrant.
-8. Ask a question about the uploaded document.
-9. Qdrant retrieves the most relevant chunks.
-10. The chunks are used as context for the local LLM.
-11. The generated answer streams into the UI.
-12. Retrieval metadata can be inspected through the debug panel.
-
-## Current Limitations
-
-- Chunking is currently character-based rather than token-aware or structure-aware.
-- Similarity threshold is manually configured.
-- Retrieval currently uses dense semantic search only.
-- No reranking layer is implemented yet.
-- No lexical or hybrid retrieval is implemented yet.
-- Conversation state currently exists only in the frontend session.
-- Uploaded document metadata is not persisted in a relational database.
-- Scanned/image-only documents may require a dedicated OCR preprocessing pipeline.
-- Authentication and multi-user isolation are not implemented.
-
-## Planned Improvements
-
-- PostgreSQL document and conversation persistence
-- Hybrid lexical + semantic search
-- PostgreSQL full-text search
-- Reciprocal Rank Fusion
-- Cross-encoder reranking
-- Retrieval evaluation with Recall@K and MRR
-- Generation faithfulness evaluation
-- Latency benchmarking
-- Chunk-size and Top-K experiments
-- Docker Compose environment
-- Improved citation rendering
-- Token-aware or structure-aware chunking
-- MCP tool integration
-- Tool-calling agent workflows
-
-## Engineering Goals
-
-This project is designed to explore the engineering decisions behind production-oriented AI systems, including:
-
-- Why vector databases are used
-- How chunk size affects retrieval
-- How Top-K affects context quality
-- How similarity thresholds affect recall and precision
-- How retrieval and generation failures can be separated
-- How local LLMs can be integrated behind an API
-- How streaming responses improve application UX
-- How retrieval metadata improves observability and debugging
-
-The goal is not only to produce a working RAG demo, but also to measure, understand, and explain the trade-offs behind the system.
+- End-to-end RAG architecture and grounded, streaming generation
+- Vector retrieval and Qdrant payload/identity design
+- Semantic versus lexical retrieval trade-offs
+- Reciprocal Rank Fusion and cross-encoder reranking
+- Labeled retrieval evaluation and latency/quality analysis
+- FastAPI service boundaries, errors, health checks, and timeouts
+- Docker service networking and persistent vector storage
+- Local LLM serving with Ollama

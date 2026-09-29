@@ -1,0 +1,171 @@
+[
+    {
+        "id": "thesis-001",
+        "question": "How many sampled chess positions were used to train the CNN policy-value network?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "dcda9b8d-b282-5fd0-8d3d-a323e16c3207"
+        ]
+    },
+    {
+        "id": "thesis-002",
+        "question": "Which dataset was used to train the CNN policy-value model?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "7a61877b-96b2-5d34-b2f7-e3ffc0421fd3",
+            "dcda9b8d-b282-5fd0-8d3d-a323e16c3207"
+        ]
+    },
+    {
+        "id": "thesis-003",
+        "question": "Which three termination types were excluded from the training dataset?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "fd74adc8-f2ce-5886-9519-5ff789987cbc",
+            "3235be90-3d07-54ff-b7a4-4265b52cb1e7",
+            "37be68df-355e-5cb3-9c22-6ce36e085eac"
+        ]
+    },
+    {
+        "id": "thesis-004",
+        "question": "How many games remained in the dataset after filtering?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "3235be90-3d07-54ff-b7a4-4265b52cb1e7"
+        ]
+    },
+    {
+        "id": "thesis-005",
+        "question": "How often were positions sampled from each retained game and what was the maximum number of sampled positions per game?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "8c8e5ea4-6111-53c3-be7f-f6f5bd6203bb"
+        ]
+    },
+    {
+        "id": "thesis-006",
+        "question": "What move is used as the policy target at each sampled position?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "78623d29-2f70-588e-aad7-6262b6d30766"
+        ]
+    },
+    {
+        "id": "thesis-007",
+        "question": "How are White wins, Black wins, and draws mapped to value targets?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "0ef0dade-8965-5631-85b8-d8080320ef79"
+        ]
+    },
+    {
+        "id": "thesis-008",
+        "question": "What are the four phases of the Monte Carlo Tree Search loop used in the thesis?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "f2c43854-385d-5bf6-a3ff-9a0871a87e21"
+        ]
+    },
+    {
+        "id": "thesis-009",
+        "question": "What exploration constant is used in the UCB1 formula for Baseline MCTS?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "1c352733-0632-5913-99af-3968e29afde8",
+            "4faa2dbb-86db-502d-9097-944d7b09c77b"
+        ]
+    },
+    {
+        "id": "thesis-010",
+        "question": "How is a chess position encoded before being passed to the convolutional neural network?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "f3ccbead-2b81-550c-b3b2-da9e3f56a282"
+        ]
+    },
+    {
+        "id": "thesis-011",
+        "question": "What does channel 12 represent in the 13-channel board tensor?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "f3ccbead-2b81-550c-b3b2-da9e3f56a282"
+        ]
+    },
+    {
+        "id": "thesis-012",
+        "question": "How many residual blocks are used in the CNN backbone and how many feature channels do they use?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "0321f3b0-0ea6-520c-ac28-285e854548d1",
+            "77fa5469-9522-517a-8aa9-1b7acf7cb37f"
+        ]
+    },
+    {
+        "id": "thesis-013",
+        "question": "What label smoothing value is used when training the policy head?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "0087342f-3e7c-5a7a-a2d8-3f59a7888378"
+        ]
+    },
+    {
+        "id": "thesis-014",
+        "question": "How does CNN+MCTS evaluate an expanded position differently from Baseline MCTS?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "07e78270-2145-507d-9189-1c9c80a0daaa",
+            "4f7bcad1-cf06-5867-8081-c026e05568be"
+        ]
+    },
+    {
+        "id": "thesis-015",
+        "question": "What policy temperature is used in CNN+MCTS and why is a value greater than one used?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "439b12d9-6073-50ad-bd5b-88626ac6e2d5"
+        ]
+    },
+    {
+        "id": "thesis-016",
+        "question": "What repetition penalty is applied by CNN+MCTS to moves that could lead to threefold repetition?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "9e3388ef-2e24-5fbd-bf07-56538dcba620"
+        ]
+    },
+    {
+        "id": "thesis-017",
+        "question": "What optimizer, learning rate, and train-validation-test split were used for training?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "bf4d9517-55a7-5024-9419-2ba40728989b"
+        ]
+    },
+    {
+        "id": "thesis-018",
+        "question": "At which epoch was the best model selected and what was its best validation total loss?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "372e5cba-c406-544d-96b9-3a6a3fcd877e",
+            "dcda9b8d-b282-5fd0-8d3d-a323e16c3207"
+        ]
+    },
+    {
+        "id": "thesis-019",
+        "question": "How many simulations per move were allocated to each MCTS-based agent in the experiments?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "eea1dac8-7eca-5101-8abb-0e23483e6efb",
+            "dcda9b8d-b282-5fd0-8d3d-a323e16c3207",
+            "4faa2dbb-86db-502d-9097-944d7b09c77b"
+        ]
+    },
+    {
+        "id": "thesis-020",
+        "question": "What were the win, draw, and loss counts for CNN+MCTS against Baseline MCTS in the standard initial-position experiment?",
+        "expected_document": "22023623 - Eren Yılmaz - Mehmet Şamil Güneş.pdf",
+        "expected_chunk_ids": [
+            "eaa76ba2-bf66-59bc-9b17-a3dbfe0192f1"
+        ]
+    }
+]
