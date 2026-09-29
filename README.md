@@ -16,19 +16,24 @@ reranking without changing the production answer path.
 
 ```mermaid
 flowchart LR
-    browser["Browser / React"] -->|"API requests"| api["FastAPI"]
-    frontend["Nginx frontend"] -->|"static assets"| browser
+    browser["Browser / React"]
 
     subgraph compose["Docker Compose"]
-        api
-        frontend
+        frontend["Nginx frontend"]
+        api["FastAPI"]
         qdrant["Qdrant"]
     end
+
+    ollama["Host Ollama\nQwen2.5:7B"]
+
+    frontend -->|"serves static assets"| browser
+    browser -->|"API requests / streamed NDJSON"| api
 
     api -->|"ingestion: parse → chunk → embed"| qdrant
     api -->|"dense retrieval"| qdrant
     api -.->|"hybrid eval: BM25 + RRF + reranker"| qdrant
-    api -->|"retrieved context"| ollama["Host Ollama\nQwen2.5:7B"]
+
+    api -->|"retrieved context"| ollama
     ollama -->|"streamed answer"| api
 ```
 
